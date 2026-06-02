@@ -1,14 +1,135 @@
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+import random
+
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup
+)
+
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
 TOKEN = "8667033910:AAEcAqxzvRdlQd8qewzeqR-z2TEG_ag7ep8"
 
+players = {}
+records = {}
+
+keyboard = ReplyKeyboardMarkup(
+    [
+        ["🎮 New Game"],
+        ["🏆 My Record", "❓ Help"]
+    ],
+    resize_keyboard=True
+)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hi! the number guessing robot is ready.")
+    user_id = update.effective_user.id
+
+    players[user_id] = {
+        "number": random.randint(1, 99),
+        "tries": 0
+    }
+
+    await update.message.reply_text(
+        "🎲 I picked a number between 1 and 99.\n"
+        "Try to guess it!",
+        reply_markup=keyboard
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🎮 Number Guessing Game\n\n"
+        "1. Start a game.\n"
+        "2. Send a number.\n"
+        "3. I'll tell you Bigger or Smaller.\n"
+        "4. Try to find the correct number.\n\n"
+        "Good luck! 😄"
+    )
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text
+
+    if text == "🎮 New Game":
+        await start(update, context)
+        return
+
+    if text == "🏆 My Record":
+        if user_id in records:
+            await update.message.reply_text(
+                f"🏆 Your best record is {records[user_id]} attempts."
+            )
+        else:
+            await update.message.reply_text(
+                "You don't have a record yet."
+            )
+        return
+
+    if text == "❓ Help":
+        await help_command(update, context)
+        return
+
+    if user_id not in players:
+        await update.message.reply_text(
+            "Start a game first using /start"
+        )
+        return
+
+    try:
+        guess = int(text)
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Please send a number between 1 and 99."
+        )
+        return
+
+    players[user_id]["tries"] += 1
+
+    answer = players[user_id]["number"]
+    tries = players[user_id]["tries"]
+
+    if guess < answer:
+        await update.message.reply_text(
+            f"⬆️ Bigger!\nAttempts: {tries}"
+        )
+
+    elif guess > answer:
+        await update.message.reply_text(
+            f"⬇️ Smaller!\nAttempts: {tries}"
+        )
+
+    else:
+        if user_id not in records or tries < records[user_id]:
+            records[user_id] = tries
+
+        await update.message.reply_text(
+            f"🎉 Correct!\n\n"
+            f"You guessed the number in {tries} attempts.\n"
+            f"🏆 Best record: {records[user_id]}\n\n"
+            f"Press 🎮 New Game to play again."
+        )
+
+        del players[user_id]
+
 
 app = Application.builder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
-print("Bot is running...")
+app.add_handler(CommandHandler("help", help_command))
+app.add_handler(
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        handle_message
+    )
+)
+
+print("🤖 Bot is running...")
 
 app.run_polling()
