@@ -13,7 +13,8 @@ from telegram.ext import (
     filters
 )
 
-TOKEN = "8667033910:AAEcAqxzvRdlQd8qewzeqR-z2TEG_ag7ep8"
+import os
+TOKEN = os.getenv("TOKEN")
 
 players = {}
 records = {}
