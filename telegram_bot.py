@@ -1,4 +1,6 @@
+import os
 import random
+from flask import Flask, request
 
 from telegram import (
     Update,
@@ -13,8 +15,10 @@ from telegram.ext import (
     filters
 )
 
-import os
+# TOKEN از Render
 TOKEN = os.getenv("TOKEN")
+
+app = Flask(__name__)
 
 players = {}
 records = {}
@@ -26,6 +30,9 @@ keyboard = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+# Telegram bot app
+bot_app = Application.builder().token(TOKEN).build()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -68,9 +75,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🏆 Your best record is {records[user_id]} attempts."
             )
         else:
-            await update.message.reply_text(
-                "You don't have a record yet."
-            )
+            await update.message.reply_text("You don't have a record yet.")
         return
 
     if text == "❓ Help":
@@ -78,17 +83,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user_id not in players:
-        await update.message.reply_text(
-            "Start a game first using /start"
-        )
+        await update.message.reply_text("Start a game first using /start")
         return
 
     try:
         guess = int(text)
     except ValueError:
-        await update.message.reply_text(
-            "❌ Please send a number between 1 and 99."
-        )
+        await update.message.reply_text("❌ Please send a number between 1 and 99.")
         return
 
     players[user_id]["tries"] += 1
@@ -97,14 +98,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tries = players[user_id]["tries"]
 
     if guess < answer:
-        await update.message.reply_text(
-            f"⬆️ Bigger!\nAttempts: {tries}"
-        )
+        await update.message.reply_text(f"⬆️ Bigger!\nAttempts: {tries}")
 
     elif guess > answer:
-        await update.message.reply_text(
-            f"⬇️ Smaller!\nAttempts: {tries}"
-        )
+        await update.message.reply_text(f"⬇️ Smaller!\nAttempts: {tries}")
 
     else:
         if user_id not in records or tries < records[user_id]:
@@ -120,17 +117,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         del players[user_id]
 
 
-app = Application.builder().token(TOKEN).build()
+# ---------------- HANDLERS ----------------
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CommandHandler("help", help_command))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
-app.add_handler(
-    MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        handle_message
-    )
-)
 
-print("🤖 Bot is running...")
+# ---------------- FLASK ----------------
+@app.route("/")
+def home():
+    return "Bot is running"
 
-app.run_polling()
+
+# IMPORTANT: no TOKEN here
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot_app.bot)
+    bot_app.update_queue.put_nowait(update)
+    return "ok"
+
+
+# ---------------- RUN ----------------
+if name == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
