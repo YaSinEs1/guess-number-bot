@@ -1,12 +1,7 @@
 import os
 import random
-from flask import Flask, request
 
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup
-)
-
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -15,10 +10,7 @@ from telegram.ext import (
     filters
 )
 
-# TOKEN از Render
 TOKEN = os.getenv("TOKEN")
-
-app = Flask(__name__)
 
 players = {}
 records = {}
@@ -31,9 +23,6 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# Telegram bot app
-bot_app = Application.builder().token(TOKEN).build()
-
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -44,8 +33,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     await update.message.reply_text(
-        "🎲 I picked a number between 1 and 99.\n"
-        "Try to guess it!",
+        "🎲 I picked a number between 1 and 99.\nTry to guess it!",
         reply_markup=keyboard
     )
 
@@ -55,9 +43,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🎮 Number Guessing Game\n\n"
         "1. Start a game.\n"
         "2. Send a number.\n"
-        "3. I'll tell you Bigger or Smaller.\n"
-        "4. Try to find the correct number.\n\n"
-        "Good luck! 😄"
+        "3. Bigger or Smaller.\n\nGood luck! 😄"
     )
 
 
@@ -72,10 +58,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🏆 My Record":
         if user_id in records:
             await update.message.reply_text(
-                f"🏆 Your best record is {records[user_id]} attempts."
+                f"🏆 Best record: {records[user_id]} attempts"
             )
         else:
-            await update.message.reply_text("You don't have a record yet.")
+            await update.message.reply_text("No record yet")
         return
 
     if text == "❓ Help":
@@ -83,13 +69,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user_id not in players:
-        await update.message.reply_text("Start a game first using /start")
+        await update.message.reply_text("Start a game first")
         return
 
     try:
         guess = int(text)
-    except ValueError:
-        await update.message.reply_text("❌ Please send a number between 1 and 99.")
+    except:
+        await update.message.reply_text("Send a number")
         return
 
     players[user_id]["tries"] += 1
@@ -98,45 +84,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tries = players[user_id]["tries"]
 
     if guess < answer:
-        await update.message.reply_text(f"⬆️ Bigger!\nAttempts: {tries}")
+        await update.message.reply_text(f"⬆️ Bigger! ({tries})")
 
     elif guess > answer:
-        await update.message.reply_text(f"⬇️ Smaller!\nAttempts: {tries}")
+        await update.message.reply_text(f"⬇️ Smaller! ({tries})")
 
     else:
         if user_id not in records or tries < records[user_id]:
             records[user_id] = tries
 
         await update.message.reply_text(
-            f"🎉 Correct!\n\n"
-            f"You guessed the number in {tries} attempts.\n"
-            f"🏆 Best record: {records[user_id]}\n\n"
-            f"Press 🎮 New Game to play again."
+            f"🎉 Correct in {tries} tries!\n🏆 Best: {records[user_id]}"
         )
 
         del players[user_id]
 
 
-# ---------------- HANDLERS ----------------
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(CommandHandler("help", help_command))
-bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app = Application.builder().token(TOKEN).build()
 
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("help", help_command))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# ---------------- FLASK ----------------
-@app.route("/")
-def home():
-    return "Bot is running"
-
-
-# IMPORTANT: no TOKEN here
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.update_queue.put_nowait(update)
-    return "ok"
-
-
-# ---------------- RUN ----------------
-if name == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+print("Bot is running...")
+app.run_polling()
